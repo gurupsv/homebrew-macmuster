@@ -1,0 +1,82 @@
+name: Update cask
+
+# Keeps Casks/m/macmuster.rb in step with the latest MacMuster GitHub Release.
+# Pull model: this repo polls the app repo's public API, so no cross-repo
+# token is needed; the built-in GITHUB_TOKEN only writes to this repo.
+#
+# `releases/latest` excludes drafts and pre-releases, so tags like 1.1.0-rc1
+# never reach the cask. A run is a no-op unless the latest release is strictly
+# newer than the cask's version. If the release's .pkg is not uploaded yet the
+# download fails and the next scheduled run retries.
+#
+# Run it on demand from the Actions tab (workflow_dispatch) right after a
+# release to skip the wait.
+
+on:
+  schedule:
+    - cron: '17 * * * *'   # hourly, off the top of the hour to dodge the queue
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push the cask bump to this repo
+
+concurrency:
+  group: update-cask
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Bump cask to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_REPO: gurupsv/MacMuster
+          CASK: Casks/m/macmuster.rb
+        run: |
+          set -euo pipefail
+
+          # Release data is untrusted input: accept only a plain X.Y.Z tag.
+          LATEST="$(gh api "repos/${APP_REPO}/releases/latest" --jq .tag_name)"
+          if ! [[ "$LATEST" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Latest release tag '${LATEST}' is not X.Y.Z; nothing to do."
+            exit 0
+          fi
+
+          CURRENT="$(sed -nE 's/^  version "([^"]+)"$/\1/p' "$CASK")"
+          if [ -z "$CURRENT" ]; then
+            echo "::error::Could not read the current version from ${CASK}."
+            exit 1
+          fi
+
+          # Only move forward: never downgrade if an older tag is somehow "latest".
+          if [ "$LATEST" = "$CURRENT" ] || [ "$(printf '%s\n%s\n' "$CURRENT" "$LATEST" | sort -V | tail -1)" = "$CURRENT" ]; then
+            echo "Cask is at ${CURRENT}; latest release is ${LATEST}. Up to date."
+            exit 0
+          fi
+
+          # Hash the exact bytes the cask will download (same URL shape as the cask's `url`).
+          PKG="MacMuster-${LATEST}.pkg"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$PKG" \
+            "https://github.com/${APP_REPO}/releases/download/${LATEST}/${PKG}"
+          SHA="$(sha256sum "$RUNNER_TEMP/$PKG" | awk '{print $1}')"
+          if ! [[ "$SHA" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::Unexpected sha256 '${SHA}'."
+            exit 1
+          fi
+
+          sed -i -E \
+            -e "s/^(  version \").*(\")$/\1${LATEST}\2/" \
+            -e "s/^(  sha256 \").*(\")$/\1${SHA}\2/" \
+            "$CASK"
+
+          git diff --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "macmuster: update to ${LATEST}"
+          git push

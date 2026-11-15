@@ -4,7 +4,7 @@ cask "macmuster" do
 
   url "https://github.com/gurupsv/MacMuster/releases/download/#{version}/MacMuster-#{version}.pkg"
   name "MacMuster"
-  desc "Menu-bar application launcher and organizer for macOS"
+  desc "Menu-bar application launcher and organizer"
   homepage "https://github.com/gurupsv/MacMuster"
 
   livecheck do
@@ -12,7 +12,7 @@ cask "macmuster" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   pkg "MacMuster-#{version}.pkg"
 
@@ -20,7 +20,7 @@ cask "macmuster" do
             delete: "/Applications/MacMuster.app"
 
   zap trash: [
-    "~/Library/Preferences/com.macmuster.app.plist",
     "~/Library/Caches/MacMuster",
+    "~/Library/Preferences/com.macmuster.app.plist",
   ]
 end

@@ -1,6 +1,6 @@
 cask "macmuster" do
-  version "1.1.1"
-  sha256 "044e9423591fb276c69321f2e13fdb5b8491354c5cfe3d71ffffd2b49acb0235"
+  version "1.1.2"
+  sha256 "03a394c134d37c72f083518b789d9c70c5d5c790a859151c7d72b01d2a020945"
 
   url "https://github.com/gurupsv/MacMuster/releases/download/#{version}/MacMuster-#{version}.pkg"
   name "MacMuster"
